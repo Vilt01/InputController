@@ -1,29 +1,84 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF8">
-    <title>Тест контроллера</title>
+    <meta charset="UTF-8">
+    <title>универсальный котроллер вввода</title>
+
+<style>
+    body { font-family: sans-serif; margin: 20px; background: #2a2a2a; color: white; }
+    #game-area {
+        width: 600px; height: 300px;
+        background: #444; border: 2px solid #666;
+        position: relative;
+        overflow: hidden; margin-bottom: 20px;
+    }
+    #player {
+        width: 40px; height: 40px;
+        background: #4caf50;
+        border-radius: 5px;
+        position: absolute; top: 
+        130px; left: 280px;
+    }
+    #player.jumping {
+        background: #ffc107;
+        }
+    
+    .controls {
+        display: flex;
+        gap: 10 px;
+        flex-wrap: wrap;
+    }
+
+    button {
+        padding: 8px 12px;
+        cursor: pointer;
+        background: #555;
+        color: white;
+        border: 1px solid #777;
+        border-radius: 3px;
+    }
+
+    button.hover {
+        padding: 10px;
+        height: 120px;
+        overflow-y: auto;
+        background: #111;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 12px;
+        border: 1px solid #333;
+    }
+    </style>
 </head>    
-<BOdy>
-    <H1> проверка в консоли (F12)</H1>
-    <script src="Input-controller.js"></script>
-    <script>
-        //создается экземпляр
-        const controller = new InputController(
-            {left: {keys: [37,65] } }, //действие 'left' на стрелку 37, и 65
-            document
-        );
 
-        document.addEventListener(controller.ACTION_ACTIVATED, (e) => {
-            console.log('АКТИВАЦИЯ:', e.detail);
-        });
+    <body>
+        
+        <h2>Интерактивный объект</h2>
+        <div id="game-area">
+            <div id="player"></div>
+        </div>
 
-        document.addEventListener(controller.ACTION_DEACTIVATED, (e) =>{
-            console.log('ДЕАКТИВАЦИЯ:', e.detail);
-        });
+        <h2>Кнопки управления</h2>
+        <div class="controls">
+            <button id ="btn-attach">Attach (включить)</button>
 
-        console.log('Контроллер создан. Нажмите А или стрелу влево!');
-    </script>
-</BOdy>
+            <button id ="btn-detach">Detach (выключить)</button>
+
+            <button id ="btn-enable">Включить котроллер</button>
+
+            <button id ="btn-disable">Выключить котроллер</button>
+
+            <button id ="btn-bind-jump">Добавить активность "Прыжок"</button>
+
+            <button id ="btn-disable-jump">Отключить действие "Прыжок"</button>
+
+        </div>
+
+        <h2>Лог событий</h2>
+        <div id="Log"></div>
+
+        <script src="Input-controller.js"></script>
+        <script src="input-controller-test.js"></script>
+        
+    </body>
 </html>
-

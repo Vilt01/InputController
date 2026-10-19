@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF8">
+    <title>Тест контроллера</title>
+</head>    
+<BOdy>
+    <H1> проверка в консоли (F12)</H1>
+    <script src="Input-controller.js"></script>
+    <script>
+        //создается экземпляр
+        const controller = new InputController(
+            {left: {keys: [37,65] } }, //действие 'left' на стрелку 37, и 65
+            document
+        );
+
+        document.addEventListener(controller.ACTION_ACTIVATED, (e) => {
+            console.log('АКТИВАЦИЯ:', e.detail);
+        });
+
+        document.addEventListener(controller.ACTION_DEACTIVATED, (e) =>{
+            console.log('ДЕАКТИВАЦИЯ:', e.detail);
+        });
+
+        console.log('Контроллер создан. Нажмите А или стрелу влево!');
+    </script>
+</BOdy>
+</html>
+

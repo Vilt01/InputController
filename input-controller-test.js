@@ -25,7 +25,7 @@ function log(msg) {
     logEl.scrollTop = logEl.scrollHeight; // Авто-прокрутка вниз
 }
 
-// Реагируем на активацию действий (когда нажали кнопку)
+
 document.addEventListener(controller.ACTION_ACTIVATED, (e) => {
     log(`АКТИВАЦИЯ: ${e.detail}`);
     if (e.detail === 'jump') {
@@ -33,7 +33,7 @@ document.addEventListener(controller.ACTION_ACTIVATED, (e) => {
     }
 });
 
-// Реагируем на деактивацию (когда отпустили кнопку)
+
 document.addEventListener(controller.ACTION_DEACTIVATED, (e) => {
     log(`ДЕАКТИВАЦИЯ: ${e.detail}`);
     if (e.detail === 'jump') {
@@ -42,13 +42,13 @@ document.addEventListener(controller.ACTION_DEACTIVATED, (e) => {
 });
 
 function gameLoop() {
-    // Опрашиваем контроллер: нажато ли действие?
+    
     if (controller.isActionActive('left'))  posX -= speed;
     if (controller.isActionActive('right')) posX += speed;
     if (controller.isActionActive('up'))    posY -= speed;
     if (controller.isActionActive('down'))  posY += speed;
 
-    // Не даем квадратику вылететь за пределы поля
+    
     const maxX = 600 - 40;
     const maxY = 300 - 40;
     if (posX < 0) posX = 0;
@@ -56,7 +56,7 @@ function gameLoop() {
     if (posY < 0) posY = 0;
     if (posY > maxY) posY = maxY;
 
-    // Применяем новые координаты
+    
     player.style.left = posX + 'px';
     player.style.top = posY + 'px';
 
@@ -95,7 +95,7 @@ document.getElementById('btn-disable-jump').onclick = () => {
     log('Вызван метод: disableAction("jump")');
 };
 
-// Хитрость: не даем кнопкам забирать фокус на себя
+
 document.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('mousedown', e => e.preventDefault());
 });

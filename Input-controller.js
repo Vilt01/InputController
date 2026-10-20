@@ -1,23 +1,27 @@
-// Оборачиваем в функцию, чтобы переменные не выходили в глобальную область // Строковые значения событий вынесены в константы 
-(function (global) { 'use strict';
+// Оборачиваем в функцию, чтобы переменные не выходили в глобальную область 
+(function (global) 
+{ 'use strict';
 const ACTION_ACTIVATED = 'input-controller:action-activated';
 const ACTION_DEACTIVATED = 'input-controller:action-deactivated';
 
-//STRATEGY: базовый класс плагина 
+// STRATEGY: базовый класс плагина 
 class InputPlugin {
     constructor() {
         this.controller = null;
         this.target = null;
     }
 
-    // Вызывается при подключении плагина к контроллеру
     init(controller, target) {
         this.controller = controller;
         this.target = target;
     }
     
-    // Вызывается при отключении
     destroy() {}
+
+    // Базовый метод. Контроллер будет спрашивать это у всех плагинов.
+    isKeyPressed(keyCode) {
+        return false;
+    }
 }
 
 // CONCRETE STRATEGY: плагин клавиатуры
@@ -45,9 +49,9 @@ class KeyboardPlugin extends InputPlugin {
 
     _handleKeyDown(e) {
         const code = e.keyCode || e.which;
-        if (!code || this._pressedKeys.has(code)) return; // Игнорируем автоповтор
+        if (!code || this._pressedKeys.has(code)) return;
         
-        this._pressedKeys.add(code); // Добавляем клавишу в Set
+        this._pressedKeys.add(code);
         this._updateActions();
     }
 
@@ -59,14 +63,11 @@ class KeyboardPlugin extends InputPlugin {
         this._updateActions();
     }
 
-    // Плагин сам решает, активен ли экшен, читая настройки контроллера
     _updateActions() {
         for (const [name, action] of this.controller._actions) {
             if (!action.config || !action.config.keys) continue;
-            
-            // Проверяем, нажата ли хотя бы одна клавиша из конфига
             const isActive = action.config.keys.some(k => this._pressedKeys.has(k));
-            this.controller.setActionState(name, isActive);
+            this.controller.setActionState(name, this, isActive);
         }
     }
 
@@ -75,8 +76,60 @@ class KeyboardPlugin extends InputPlugin {
     }
 }
 
+// CONCRETE STRATEGY: плагин мыши
+class MousePlugin extends InputPlugin {
+    constructor() {
+        super();
+        this._pressedButtons = new Set(); // Исправлено на множественное число
+        this._onMouseDown = this._handleMouseDown.bind(this);
+        this._onMouseUp = this._handleMouseUp.bind(this); // Название функции
+    }
 
-//Context, сам контроллер
+    init(controller, target) {
+        super.init(controller, target);
+        this.target.addEventListener('mousedown', this._onMouseDown);
+        this.target.addEventListener('mouseup', this._onMouseUp);
+    }
+
+    destroy() {
+        if (this.target) {
+            this.target.removeEventListener('mousedown', this._onMouseDown);
+            this.target.removeEventListener('mouseup', this._onMouseUp); // Исправлено tihs на this
+        }
+        this._pressedButtons.clear();
+    }
+
+    _handleMouseDown(e) {
+        const buttonCode = e.button; // 0 - левая, 1 - средняя, 2 - правая
+        if (this._pressedButtons.has(buttonCode)) return;
+
+        this._pressedButtons.add(buttonCode);
+        this._updateActions();
+    }
+
+    _handleMouseUp(e) { // Переименовано из _handleKeyUp
+        const buttonCode = e.button;
+        if (!this._pressedButtons.has(buttonCode)) return;
+
+        this._pressedButtons.delete(buttonCode);
+        this._updateActions();
+    }
+
+    _updateActions() {
+        for (const [name, action] of this.controller._actions) {
+            if (!action.config || !action.config.mouseButtons) continue;
+            const isActive = action.config.mouseButtons.some(b => this._pressedButtons.has(b));
+            this.controller.setActionState(name, this, isActive);
+        }
+    }
+
+    isKeyPressed(keyCode) {
+        // Вернул в одну строку, чтобы избежать ловушки автоматической точки с запятой
+        return this._pressedButtons.has(keyCode); 
+    }
+}
+
+// Context, сам контроллер
 class InputController {
     constructor(actionsToBind, target) {
         this.ACTION_ACTIVATED = ACTION_ACTIVATED;
@@ -91,14 +144,18 @@ class InputController {
         this._plugins = [];
         this._target = null;
 
-        // Сохраняем функции фокуса
         this._onWinFocus = () => { this.focused = true; };
         this._onWinBlur = () => {
             this.focused = false;
-            // Все сбрасываем
-            this._actions.forEach((action, name) => this.setActionState(name, false));
+            this._actions.forEach((action, name) => {
+                action.activePlugins.clear();
+                this.setActionState(name, null, false);
+            });
+     
+            // Сбрасываем состояния у всех плагинов
             this._plugins.forEach(p => { 
                 if (p._pressedKeys) p._pressedKeys.clear(); 
+                if (p._pressedButtons) p._pressedButtons.clear(); // Добавили очистку для мыши
             });
         };
 
@@ -109,7 +166,6 @@ class InputController {
     bindActions(actionsToBind) {
         if (!actionsToBind || typeof actionsToBind !== 'object') return;
 
-        // Исправлено: Object.keys (с большой буквы)
         Object.keys(actionsToBind).forEach((actionName) => {
             const config = actionsToBind[actionName] || {};
 
@@ -117,7 +173,8 @@ class InputController {
                 this._actions.set(actionName, { 
                     config: {}, 
                     enabled: true,
-active: false 
+                    active: false,
+                    activePlugins: new Set() 
                 });
             }
             
@@ -133,22 +190,37 @@ active: false
     // Подключение плагина
     addPlugin(plugin) {
         if (!(plugin instanceof InputPlugin)) return;
-
         this._plugins.push(plugin);
         if (this._target) plugin.init(this, this._target);
     }
 
     // Метод, который плагины вызывают, когда состояние изменилось
-    setActionState(actionName, isActive) {
+    setActionState(actionName, plugin, isActive) {
         const action = this._actions.get(actionName);
         if (!action) return;
 
-        if (action.active !== isActive) {
-            action.active = isActive;
+        const wasActive = action.active;
+
+        if (isActive) {
+            action.activePlugins.add(plugin);
+        } else {
+            action.activePlugins.delete(plugin);
+        }
+
+        action.active = action.activePlugins.size > 0;
+
+        if (wasActive !== action.active) {
             if (this.enabled && this.focused && action.enabled) {
-                this._dispatch(isActive ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
+                this._dispatch(action.active ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
             }
         }
+
+        //if (action.active !== isActive) {
+          //  action.active = isActive;
+            //if (this.enabled && this.focused && action.enabled) {
+              //  this._dispatch(isActive ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
+            //}
+        //}
     }
 
     attach(target, dontEnable) {
@@ -156,8 +228,6 @@ active: false
         if (this._target) this.detach();
 
         this._target = target;
-
-        // Инициализируем все подключенные плагины
         this._plugins.forEach(p => p.init(this, target));
 
         global.addEventListener('focus', this._onWinFocus);
@@ -169,16 +239,17 @@ active: false
     detach() {
         if (!this._target) return;
 
-        // Уничтожаем плагины
         this._plugins.forEach(p => p.destroy());
-        
-        // Исправлено: removeEventListener
         global.removeEventListener('focus', this._onWinFocus);
         global.removeEventListener('blur', this._onWinBlur);
 
         this._target = null;
-        this.enabled = false; // Исправлено: false вместо null
-        this._actions.forEach(a => a.active = false);
+        this.enabled = false; 
+        this._actions.forEach(a => {
+            if (a.activePlugins)
+                a.activePlugins.clear();
+            a.active = false;
+        });
     }
 
     enableAction(actionName) {
@@ -203,11 +274,15 @@ active: false
 
     isKeyPressed(keyCode) {
         if (!this.enabled || !this.focused) return false;
-        const kPlugin = this._plugins.find(p => p instanceof KeyboardPlugin);
-        return kPlugin ? kPlugin.isKeyPressed(keyCode) : false;
+        
+        for (const plugin of this._plugins) {
+            if (plugin.isKeyPressed(keyCode)) {
+                return true;
+            }
+        }
+        return false;
     }
-
-    _dispatch(eventType, actionName) {
+_dispatch(eventType, actionName) {
         if (!this._target) return;
         const event = new CustomEvent(eventType, {
             detail: actionName,
@@ -220,4 +295,5 @@ active: false
 // Экспортируем классы наружу
 global.InputController = InputController;
 global.KeyboardPlugin = KeyboardPlugin;
+global.MousePlugin = MousePlugin;
 })(typeof window !== 'undefined' ? window : this);

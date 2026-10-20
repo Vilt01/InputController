@@ -3,204 +3,221 @@
 const ACTION_ACTIVATED = 'input-controller:action-activated';
 const ACTION_DEACTIVATED = 'input-controller:action-deactivated';
 
-class InputController {
-    constructor(actionsToBind, target) {
-        // Публичные константы
-        this.ACTION_ACTIVATED = ACTION_ACTIVATED;
-        this.ACTION_DEACTIVATED = ACTION_DEACTIVATED;
+//STRATEGY: базовый класс плагина 
+class InputPlugin {
+    constructor() {
+        this.controller = null;
+        this.target = null;
+    }
 
-        // Публичное свойство
-        this.enabled = true;
-        
-        // Проверка фокуса у окна
-        this.focused = typeof document !== 'undefined' && typeof document.hasFocus === 'function'
-            ? document.hasFocus()
-            : true;
+    // Вызывается при подключении плагина к контроллеру
+    init(controller, target) {
+        this.controller = controller;
+        this.target = target;
+    }
+    
+    // Вызывается при отключении
+    destroy() {}
+}
 
-        // Приватные хранилища
-        this._actions = new Map(); // Хранятся действия (Map: имя -> объект)
-        this._pressedKeys = new Set(); // Хранятся физически нажатые кнопки (Set: уникальные коды)
+// CONCRETE STRATEGY: плагин клавиатуры
+class KeyboardPlugin extends InputPlugin {
+    constructor() {
+        super();
+        this._pressedKeys = new Set();
+        this._onKeyDown = this._handleKeyDown.bind(this);
+        this._onKeyUp = this._handleKeyUp.bind(this);
+    }
 
-        this._target = null;
-        this._onKeyDown = (e) => this._handleKeyDown(e);
-        this._onKeyUp = (e) => this._handleKeyUp(e);
-        
-        this._onWinFocus = () => { this.focused = true; };
-        this._onWinBlur = () => {
-            this.focused = false;
-            this._pressedKeys.clear(); 
-            this._actions.forEach(action => action.active = false);
-        };
+    init(controller, target) {
+        super.init(controller, target);
+        this.target.addEventListener('keydown', this._onKeyDown);
+        this.target.addEventListener('keyup', this._onKeyUp);
+    }
 
-        // Если при создании класса передали действия и элемент — сразу инициализируем
-        if (actionsToBind) {
-            this.bindActions(actionsToBind);
+    destroy() {
+        if (this.target) {
+            this.target.removeEventListener('keydown', this._onKeyDown);
+            this.target.removeEventListener('keyup', this._onKeyUp);
         }
-        if (target) {
-            this.attach(target);
+        this._pressedKeys.clear();
+    }
+
+    _handleKeyDown(e) {
+        const code = e.keyCode || e.which;
+        if (!code || this._pressedKeys.has(code)) return; // Игнорируем автоповтор
+        
+        this._pressedKeys.add(code); // Добавляем клавишу в Set
+        this._updateActions();
+    }
+
+    _handleKeyUp(e) {
+        const code = e.keyCode || e.which;
+        if (!this._pressedKeys.has(code)) return;
+
+        this._pressedKeys.delete(code);
+        this._updateActions();
+    }
+
+    // Плагин сам решает, активен ли экшен, читая настройки контроллера
+    _updateActions() {
+        for (const [name, action] of this.controller._actions) {
+            if (!action.config || !action.config.keys) continue;
+            
+            // Проверяем, нажата ли хотя бы одна клавиша из конфига
+            const isActive = action.config.keys.some(k => this._pressedKeys.has(k));
+            this.controller.setActionState(name, isActive);
         }
     }
 
-    // Добавление действий в контроллер
+    isKeyPressed(keyCode) {
+        return this._pressedKeys.has(keyCode);
+    }
+}
+
+
+//Context, сам контроллер
+class InputController {
+    constructor(actionsToBind, target) {
+        this.ACTION_ACTIVATED = ACTION_ACTIVATED;
+        this.ACTION_DEACTIVATED = ACTION_DEACTIVATED;
+        
+        this.enabled = true;
+        this.focused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' 
+            ? document.hasFocus() 
+            : true;
+
+        this._actions = new Map();
+        this._plugins = [];
+        this._target = null;
+
+        // Сохраняем функции фокуса
+        this._onWinFocus = () => { this.focused = true; };
+        this._onWinBlur = () => {
+            this.focused = false;
+            // Все сбрасываем
+            this._actions.forEach((action, name) => this.setActionState(name, false));
+            this._plugins.forEach(p => { 
+                if (p._pressedKeys) p._pressedKeys.clear(); 
+            });
+        };
+
+        if (actionsToBind) this.bindActions(actionsToBind);
+        if (target) this.attach(target);
+    }
+
     bindActions(actionsToBind) {
         if (!actionsToBind || typeof actionsToBind !== 'object') return;
 
+        // Исправлено: Object.keys (с большой буквы)
         Object.keys(actionsToBind).forEach((actionName) => {
             const config = actionsToBind[actionName] || {};
 
-            // Если действия нет в Map - создаем для него запись
             if (!this._actions.has(actionName)) {
-                this._actions.set(actionName, {
-                    keys: new Set(), // Set автоматически уберет дубликаты клавиш
-                    enabled: true,   // Включено ли действие
-                    active: false    // Нажато ли действие прямо сейчас
+                this._actions.set(actionName, { 
+                    config: {}, 
+                    enabled: true,
+active: false 
                 });
             }
+            
             const action = this._actions.get(actionName);
+            Object.assign(action.config, config); 
 
-            // Добавляем клавиши
-            if (Array.isArray(config.keys)) {
-                config.keys.forEach(keyCode => action.keys.add(keyCode));
-            }
-
-            // Если в конфиге указано enabled: false — выключаем действие
             if (config.enabled !== undefined) {
                 action.enabled = Boolean(config.enabled);
             }
         });
     }
 
-    // Включает генерацию событий для конкретной активности
-    enableAction(actionName) {
-        const action = this._actions.get(actionName);
-        if (action) {
-            action.enabled = true;
-        }
+    // Подключение плагина
+    addPlugin(plugin) {
+        if (!(plugin instanceof InputPlugin)) return;
+
+        this._plugins.push(plugin);
+        if (this._target) plugin.init(this, this._target);
     }
 
-    // Деактивирует активность (события перестают генерироваться)
-    disableAction(actionName) {
+    // Метод, который плагины вызывают, когда состояние изменилось
+    setActionState(actionName, isActive) {
         const action = this._actions.get(actionName);
         if (!action) return;
 
-        action.enabled = false;
-        action.active = false; // Принудительно сбрасываем нажатие
+        if (action.active !== isActive) {
+            action.active = isActive;
+            if (this.enabled && this.focused && action.enabled) {
+                this._dispatch(isActive ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
+            }
+        }
     }
 
-    // Нацеливает контроллер на DOM-элемент (вешает слушатели)
     attach(target, dontEnable) {
         if (!target || typeof target.addEventListener !== 'function') return;
-
-        // Если контроллер уже привязан к чему-то, сначала отвязываем
         if (this._target) this.detach();
-        target.addEventListener('keydown', this._onKeyDown);
-        target.addEventListener('keyup', this._onKeyUp);
-        global.addEventListener('focus', this._onWinFocus);
-        global.
-
-addEventListener('blur', this._onWinBlur);
 
         this._target = target;
 
-        // Если dontEnable не передан — включаем контроллер
+        // Инициализируем все подключенные плагины
+        this._plugins.forEach(p => p.init(this, target));
+
+        global.addEventListener('focus', this._onWinFocus);
+        global.addEventListener('blur', this._onWinBlur);
+
         if (!dontEnable) this.enabled = true;
     }
 
-    // Отцепляет контроллер от активного DOM-элемента
     detach() {
         if (!this._target) return;
 
-        // Снимаем все слушатели
-        this._target.removeEventListener('keydown', this._onKeyDown);
-        this._target.removeEventListener('keyup', this._onKeyUp);
+        // Уничтожаем плагины
+        this._plugins.forEach(p => p.destroy());
+        
+        // Исправлено: removeEventListener
         global.removeEventListener('focus', this._onWinFocus);
         global.removeEventListener('blur', this._onWinBlur);
 
         this._target = null;
-        this.enabled = false;
-        this._pressedKeys.clear();
+        this.enabled = false; // Исправлено: false вместо null
         this._actions.forEach(a => a.active = false);
     }
 
-    // Проверяет, активирована ли переданная активность
-    isActionActive(actionName) {
-        // Если контроллер или окно выключены — всегда false
-        if (!this.enabled || !this.focused) return false;
-
+    enableAction(actionName) {
         const action = this._actions.get(actionName);
-        // Если действия нет или оно выключено — тоже false
-        if (!action || !action.enabled) return false;
-
-        return action.active;
+        if (action) action.enabled = true;
     }
 
-    // Проверяет, нажата ли конкретная физическая кнопка (по коду)
-    isKeyPressed(keyCode) {
-        if (!this.enabled || !this.focused) return false;
-        return this._pressedKeys.has(keyCode);
-    }
-
-    // Нажатие клавиши
-    _handleKeyDown(e) {
-        const code = e.keyCode || e.which;
-        if (!code) return;
-        
-        // Игнорируем автоповтор браузера (когда клавишу зажали)
-        if (this._pressedKeys.has(code)) return; 
-
-        this._pressedKeys.add(code);
-        this._syncActionsForCode(code);
-    }
-
-    // Отпускание клавиши
-    _handleKeyUp(e) {
-        const code = e.keyCode || e.which;
-        if (!code) return;
-        if (!this._pressedKeys.has(code)) return;
-
-        this._pressedKeys.delete(code);
-        this._syncActionsForCode(code);
-    }
-
-    // Синхронизация состояний действий
-    _syncActionsForCode(code) {
-        for (const [name, action] of this._actions) {
-            // Если нажатая клавиша не относится к этому действию — пропускаем
-            if (!action.keys.has(code)) continue;
-
-            // Проверяем, нажата ли ХОТЯ БЫ ОДНА клавиша для этого действия
-            let isPhysicallyActive = false;
-            for (const k of action.keys) {
-                if (this._pressedKeys.has(k)) {
-                    isPhysicallyActive = true;
-                    break;
-                }
-            }
-
-            // Если состояние изменилось
-            if (action.active !== isPhysicallyActive) {
-                action.active = isPhysicallyActive;
-                
-                // Отправляем события только если всё включено
-                if (this.enabled && this.focused && action.enabled) {
-                    this._dispatch(isPhysicallyActive ? ACTION_ACTIVATED : ACTION_DEACTIVATED, name);
-                }
-            }
+    disableAction(actionName) {
+        const action = this._actions.get(actionName);
+        if (action) { 
+            action.enabled = false;
+            action.active = false;
         }
     }
 
-    // Отправка кастомного события
+    isActionActive(actionName) {
+        if (!this.enabled || !this.focused) return false;
+        const action = this._actions.get(actionName);
+        if (!action || !action.enabled) return false;
+        return action.active;
+    }
+
+    isKeyPressed(keyCode) {
+        if (!this.enabled || !this.focused) return false;
+        const kPlugin = this._plugins.find(p => p instanceof KeyboardPlugin);
+        return kPlugin ? kPlugin.isKeyPressed(keyCode) : false;
+    }
+
     _dispatch(eventType, actionName) {
         if (!this._target) return;
-        
         const event = new CustomEvent(eventType, {
-            detail: actionName, // Передаем название активности
+            detail: actionName,
             bubbles: true
         });
         this._target.dispatchEvent(event);
     }
 }
 
-// Экспортируем класс наружу
+// Экспортируем классы наружу
 global.InputController = InputController;
+global.KeyboardPlugin = KeyboardPlugin;
 })(typeof window !== 'undefined' ? window : this);

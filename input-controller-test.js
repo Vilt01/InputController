@@ -8,6 +8,9 @@ const controller = new InputController({
     down:  { keys: [40, 83] }  // Стрелка вниз и клавиша S
 });
 
+const keyboard = new KeyboardPlugin();
+controller.addPlugin(keyboard);
+
 controller.attach(document);
 
 const player = document.getElementById('player');

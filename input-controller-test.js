@@ -102,9 +102,7 @@ document.getElementById('btn-disable-jump').onclick = () => {
     log('Вызван метод: disableAction("jump")');
 };
 
-// Новая кнопка для проверки isKeyPressed
 document.getElementById('btn-check-mouse').onclick = () => {
-    // Проверяем, зажата ли левая кнопка мыши (код 0)
     const isPressed = controller.isKeyPressed(0);
     log(`Проверка isKeyPressed(0): ${isPressed}`);
 };

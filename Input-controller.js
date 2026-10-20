@@ -7,13 +7,15 @@ const ACTION_DEACTIVATED = 'input-controller:action-deactivated';
 // STRATEGY: базовый класс плагина 
 class InputPlugin {
     constructor() {
-        this.controller = null;
         this.target = null;
+        this.actions = null;
+        this.onStateChange = null;
     }
 
-    init(controller, target) {
-        this.controller = controller;
+    init (target, actions, onStateChange) {
         this.target = target;
+        this.actions = actions;
+        this.onStateChange = onStateChange;
     }
     
     destroy() {}
@@ -33,8 +35,8 @@ class KeyboardPlugin extends InputPlugin {
         this._onKeyUp = this._handleKeyUp.bind(this);
     }
 
-    init(controller, target) {
-        super.init(controller, target);
+    init(target, actions, onStateChange) {
+        super.init(target, actions, onStateChange);
         this.target.addEventListener('keydown', this._onKeyDown);
         this.target.addEventListener('keyup', this._onKeyUp);
     }
@@ -64,10 +66,10 @@ class KeyboardPlugin extends InputPlugin {
     }
 
     _updateActions() {
-        for (const [name, action] of this.controller._actions) {
+        for (const [name, action] of this.actions) {
             if (!action.config || !action.config.keys) continue;
             const isActive = action.config.keys.some(k => this._pressedKeys.has(k));
-            this.controller.setActionState(name, this, isActive);
+            this.onStateChange(name, isActive) //вызывем колбэк, а не метод контроллера
         }
     }
 
@@ -85,8 +87,8 @@ class MousePlugin extends InputPlugin {
         this._onMouseUp = this._handleMouseUp.bind(this); // Название функции
     }
 
-    init(controller, target) {
-        super.init(controller, target);
+     init(target, actions, onStateChange) {
+        super.init(target, actions, onStateChange);
         this.target.addEventListener('mousedown', this._onMouseDown);
         this.target.addEventListener('mouseup', this._onMouseUp);
     }
@@ -94,7 +96,7 @@ class MousePlugin extends InputPlugin {
     destroy() {
         if (this.target) {
             this.target.removeEventListener('mousedown', this._onMouseDown);
-            this.target.removeEventListener('mouseup', this._onMouseUp); // Исправлено tihs на this
+            this.target.removeEventListener('mouseup', this._onMouseUp);
         }
         this._pressedButtons.clear();
     }
@@ -107,7 +109,7 @@ class MousePlugin extends InputPlugin {
         this._updateActions();
     }
 
-    _handleMouseUp(e) { // Переименовано из _handleKeyUp
+    _handleMouseUp(e) {
         const buttonCode = e.button;
         if (!this._pressedButtons.has(buttonCode)) return;
 
@@ -116,15 +118,14 @@ class MousePlugin extends InputPlugin {
     }
 
     _updateActions() {
-        for (const [name, action] of this.controller._actions) {
+        for (const [name, action] of this.actions) {
             if (!action.config || !action.config.mouseButtons) continue;
             const isActive = action.config.mouseButtons.some(b => this._pressedButtons.has(b));
-            this.controller.setActionState(name, this, isActive);
+            this.onStateChange(name, isActive); //вызов колбэка
         }
     }
 
     isKeyPressed(keyCode) {
-        // Вернул в одну строку, чтобы избежать ловушки автоматической точки с запятой
         return this._pressedButtons.has(keyCode); 
     }
 }
@@ -155,7 +156,7 @@ class InputController {
             // Сбрасываем состояния у всех плагинов
             this._plugins.forEach(p => { 
                 if (p._pressedKeys) p._pressedKeys.clear(); 
-                if (p._pressedButtons) p._pressedButtons.clear(); // Добавили очистку для мыши
+                if (p._pressedButtons) p._pressedButtons.clear();
             });
         };
 
@@ -191,7 +192,11 @@ class InputController {
     addPlugin(plugin) {
         if (!(plugin instanceof InputPlugin)) return;
         this._plugins.push(plugin);
-        if (this._target) plugin.init(this, this._target);
+        if (this._target) {
+            //передаем target, actions и колбэк
+            plugin.init(this._target, this._actions, (name, isActive) =>
+            this.setActionState(name, plugin, isActive))
+        };
     }
 
     // Метод, который плагины вызывают, когда состояние изменилось
@@ -214,13 +219,6 @@ class InputController {
                 this._dispatch(action.active ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
             }
         }
-
-        //if (action.active !== isActive) {
-          //  action.active = isActive;
-            //if (this.enabled && this.focused && action.enabled) {
-              //  this._dispatch(isActive ? ACTION_ACTIVATED : ACTION_DEACTIVATED, actionName);
-            //}
-        //}
     }
 
     attach(target, dontEnable) {
@@ -228,7 +226,12 @@ class InputController {
         if (this._target) this.detach();
 
         this._target = target;
-        this._plugins.forEach(p => p.init(this, target));
+        
+        this._plugins.forEach(p => {
+            p.init(target, this._actions, (name, isActive) =>
+            this.setActionState(name, p, isActive)
+        );
+        });
 
         global.addEventListener('focus', this._onWinFocus);
         global.addEventListener('blur', this._onWinBlur);

@@ -12,6 +12,16 @@
         position: relative;
         overflow: hidden; margin-bottom: 20px;
     }
+
+    #platform {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        height: 20px;
+        background: #222;
+        border-top: 2px solid #555;
+    }
+
     #player {
         width: 40px; height: 40px;
         background: #4caf50;
@@ -19,6 +29,17 @@
         position: absolute; top: 
         130px; left: 280px;
     }
+
+    #ball {
+        width: 40px;
+        height: 40px;
+        background: #ff5722;
+        border-radius: 50%;
+        position: absolute;
+        bottom: 20px;
+        left: 100px;
+    }
+
     #player.jumping {
         background: #ffc107;
         }
@@ -56,6 +77,8 @@
         <h2>Интерактивный объект</h2>
         <div id="game-area">
             <div id="player"></div>
+            <div id = "ball"></div>
+            <div id = "platform"></div>
         </div>
 
         <h2>Кнопки управления</h2>
@@ -77,6 +100,8 @@
 
         <h2>Лог событий</h2>
         <div id="log"></div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
         <script src="Input-controller.js"></script>
         <script src="input-controller-test.js"></script>

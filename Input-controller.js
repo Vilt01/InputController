@@ -220,7 +220,6 @@ class InputController {
             }
         }
     }
-
     attach(target, dontEnable) {
         if (!target || typeof target.addEventListener !== 'function') return;
         if (this._target) this.detach();
@@ -294,7 +293,6 @@ _dispatch(eventType, actionName) {
         this._target.dispatchEvent(event);
     }
 }
-
 // Экспортируем классы наружу
 global.InputController = InputController;
 global.KeyboardPlugin = KeyboardPlugin;

@@ -31,42 +31,44 @@
         logEl.scrollTop = logEl.scrollHeight;
     }
 
-    // ИСПРАВЛЕННАЯ АНИМАЦИЯ БЕЗ РЫВКОВ
     function animateJump() {
         if (isJumping) return;
         isJumping = true;
 
-        const timeline = gsap.timeline({
-            onComplete: () => {
-                isJumping = false;
-            }
+        const tl = gsap.timeline({
+            onComplete: () => { isJumping = false; }
         });
 
-        timeline
-        .to(ball, { scaleX: 0.8, scaleY: 1.2, duration: 0.15, ease: "power1.inOut" })
-        // 2. Прыжок вверх - плавное замедление
-        .to(ball, { y: -100, scaleX: 1, scaleY: 1, duration: 0.4, ease: "power1.out" })
-        // 3. Падение - плавное ускорение
-        .to(ball, { y: 0, scaleX: 1, scaleY: 1, duration: 0.4, ease: "power1.in" })
-        // 4. Удар о платформу - сплющивание
-        .to(ball, { scaleX: 1.3, scaleY: 0.7, duration: 0.1, ease: "power1.out" });
+        // 1. Подготовка (Сплющивание перед прыжком)
+        tl.to(ball, { scaleX: 1.4, scaleY: 0.6, duration: 0.15, ease: "power2.inOut" })
 
-        // 5. Цикл затухающих отскоков
-        for (let i = 0; i < 3; i++) { 
-            const height = 40 / (i + 1); 
-            const duration = 0.25 / (i + 1);
+        // 2. Прыжок вверх (Растяжение)
+        .to(ball, { y: -120, scaleX: 0.8, scaleY: 1.2, duration: 0.35, ease: "power1.out" })
 
-            timeline
-            .to(ball, { y: -height, scaleX: 0.95, scaleY: 1.05, duration: duration, ease: "power1.out" })
-            // Падение вниз
-            .to(ball, { y: 0, scaleX: 1, scaleY: 1, duration: duration, ease: "power1.in" })
-            // Микро-удар о землю
-            .to(ball, { scaleX: 1.15, scaleY: 0.85, duration: 0.08, ease: "power1.out" })
-            // Восстановление формы перед следующим прыжком
-            .to(ball, { scaleX: 1, scaleY: 1, duration: 0.08, ease: "power1.inOut" });
-        }
+        // 3. Падение вниз (Растяжение)
+        .to(ball, { y: 0, scaleX: 0.8, scaleY: 1.2, duration: 0.35, ease: "power1.in" })
+
+        // 4. Первый удар об пол (сильное сплющивание)
+        .to(ball, { scaleX: 1.7, scaleY: 0.4, duration: 0.08, ease: "power1.out" })
+
+        // 5. Отскок №1 (средний)
+        .to(ball, { y: -50, scaleX: 0.85, scaleY: 1.15, duration: 0.25, ease: "power1.out" })
+        .to(ball, { y: 0, scaleX: 0.85, scaleY: 1.15, duration: 0.25, ease: "power1.in" })
+        .to(ball, { scaleX: 1.4, scaleY: 0.6, duration: 0.08, ease: "power1.out" })
+
+        // 6. Отскок №2 (маленький)
+        .to(ball, { y: -20, scaleX: 0.9, scaleY: 1.1, duration: 0.15, ease: "power1.out" })
+        .to(ball, { y: 0, scaleX: 0.9, scaleY: 1.1, duration: 0.15, ease: "power1.in" })
+        .to(ball, { scaleX: 1.15, scaleY: 0.85, duration: 0.08, ease: "power1.out" })
+
+        // 7. Отскок №3 (микро-отскок)
+        .to(ball, { y: -5, scaleX: 0.95, scaleY: 1.05, duration: 0.1, ease: "power1.out" })
+        .to(ball, { y: 0, scaleX: 0.95, scaleY: 1.05, duration: 0.1, ease: "power1.in" })
+        .to(ball, { scaleX: 1.05, scaleY: 0.95, duration: 0.08, ease: "power1.out" })
+
+        // 8. возвразщение в естественную форму
+        .to(ball, { scaleX: 1, scaleY: 1, duration: 0.4, ease: "power2.out" });
     }
-
     document.addEventListener(controller.ACTION_ACTIVATED, (e) => {
         log(`АКТИВАЦИЯ: ${e.detail}`);
         
